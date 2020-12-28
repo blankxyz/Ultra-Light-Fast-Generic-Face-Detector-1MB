@@ -4,7 +4,7 @@ This code is used to batch detect images in a folder.
 import argparse
 import os
 import sys
-
+import torch
 import cv2
 
 from vision.ssd.config.fd_config import define_img_size
@@ -49,6 +49,16 @@ else:
     print("The net type is wrong!")
     sys.exit(1)
 net.load(model_path)
+
+"""
+torchserve 模型导出
+"""
+example_input = torch.rand(1, 3, 640, 480)
+net.eval()
+inputs = example_input.to("cuda:0")
+output = torch.jit.trace(net, inputs)
+output.save("./version-RFB-320.pt")
+
 
 if not os.path.exists(result_path):
     os.makedirs(result_path)
