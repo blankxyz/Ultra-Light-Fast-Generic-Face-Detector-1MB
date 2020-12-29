@@ -366,7 +366,9 @@ class HiggsClassifier(BaseHandler):
             if image is None:
                 image = data.get("body")
 
-            input_image = Image.open(io.BytesIO(image))
+            # im = cv2.imdecode(np.frombuffer(image), cv2.IMREAD_COLOR)
+            # image = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+            input_image = Image.open(io.BytesIO(image)).convert('RGB')
             self.orig_image = input_image
             self.height, self.width = input_image.height, input_image.width
 
@@ -387,6 +389,7 @@ class HiggsClassifier(BaseHandler):
 
         # 添加为了检查输入模型参数
         checkimg = img.unsqueeze(0).to(self.device)
+        logger.info(self.timer.start())
         return self.model(checkimg)
 
     def postprocess(self, inference_output):
@@ -400,7 +403,7 @@ class HiggsClassifier(BaseHandler):
         cpu_device = torch.device("cpu")
         boxes = boxes[0]
         scores = scores[0]
-        prob_threshold = 0.6
+        prob_threshold = 0.9
         # this version of nms is slower on GPU, so we move data to CPU.
         boxes = boxes.to(cpu_device)
         scores = scores.to(cpu_device)
@@ -418,7 +421,7 @@ class HiggsClassifier(BaseHandler):
                             score_threshold=prob_threshold,
                             iou_threshold=self.iou_threshold,
                             sigma=self.sigma,
-                            top_k=5,
+                            top_k=self.candidate_size/2,
                             candidate_size=self.candidate_size)
             picked_box_probs.append(box_probs)
             picked_labels.extend([class_index] * box_probs.size(0))
@@ -430,6 +433,7 @@ class HiggsClassifier(BaseHandler):
         picked_box_probs[:, 2] *= self.width
         picked_box_probs[:, 3] *= self.height
         print(f"=========== LAST =============")
+        logger.info(self.timer.end())
         return [{
             'boxes': picked_box_probs[:, :4].tolist(),
             'labels': torch.tensor(picked_labels).tolist(),
