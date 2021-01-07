@@ -1,0 +1,175 @@
+# -*- coding:utf-8 _*-
+"""
+@author:chc
+@file: weibo_accountcode_search.py
+@time: 2020/3/2
+history：
+1. 2020/3/2 chc created
+"""
+import requests
+# import run_search_util
+import time
+from retrying import retry
+
+
+class weibo_search:
+    def __init__(self):
+        self.search_url = 'https://m.weibo.cn/api/container/getIndex?containerid=100103type%3D3%26q%3D{}%26t%3D0&page_type=3&page={}'
+
+    def get_proxies(self):
+        # 代理服务器
+        # 阿布云动态版
+        proxyHost = "http-dyn.abuyun.com"
+        proxyPort = "9020"
+        # 代理隧道验证信息
+        proxyUser = "H40C3249595Y905D"
+        proxyPass = "43CDFD383F5A23D3"
+        proxyMeta = "http://%(user)s:%(pass)s@%(host)s:%(port)s" % {
+            "host": proxyHost,
+            "port": proxyPort,
+            "user": proxyUser,
+            "pass": proxyPass,
+        }
+        proxies = {
+            "http": proxyMeta,
+            "https": proxyMeta,
+        }
+        return proxies
+
+    def extract_num(self, num):
+        try:
+            if not num:
+                return 0
+            #num = num[0]
+            if "万" in num:
+                num = int(num.replace("万", "")) * 10000
+            elif "亿" in num:
+                num = int(num.replace("亿", "")) * 100000000
+            else:
+                num = int(num)
+            return num
+        except Exception as e:
+            print('修正微博数字出现异常: {}, 异常数据为: {}'.format(e, num))
+            return 0
+
+    @retry(stop_max_attempt_number=3, stop_max_delay=1000)
+    def get_detial_info(self, id):
+        try:
+            url = 'https://m.weibo.cn/api/container/getIndex?&t=0&type=uid&containerid=100505{}'.format(id)
+            result1 = requests.get(url, proxies=self.get_proxies())
+            # 微博
+            statuses_count = result1.json()['data']['userInfo']['statuses_count']
+            wb_num = self.extract_num(str(statuses_count))
+            # 简介
+            slogan = result1.json()['data']['userInfo']['description']
+            desc1 = result1.json()['data']['userInfo']['verified_reason']
+            return statuses_count, wb_num, slogan, desc1
+        except:
+            print("微博详细信息获取异常 url {}".format(url))
+            return 0, 0, '', ''
+
+
+    def run(self):
+        # word = run_search_util.get_keyword_from_db()
+        word = ['广东']
+        for keyword in word:
+            for i in range(270, 1000):
+                import random
+                stop_time = random.randint(1, 6)
+                time.sleep(stop_time)
+                url = self.search_url.format(keyword, i)
+                try:
+                    result = requests.get(url, proxies=self.get_proxies())
+                    try:
+                        card_groups = {}
+                        for item in result.json()['data']['cards']:
+                            if 'card_group' in item.keys():
+                                card_group = item['card_group']
+
+                        save_data(card_group)
+                    except Exception as e:
+                        print(e)
+
+                    # if result.json()['data']['cards']:
+                    #     for item in result.json()['data']['cards']:
+                    #         if 'card_group' in item.keys():
+                    #             for each in item['card_group']:
+                    #                 user_id = each['user']['id']
+                    #                 img = each['user']['profile_image_url']
+                    #                 user_name = each['user']['screen_name']
+                    #                 verified_type = each['user']['verified_type']
+                    #                 verified = each['user']['verified']
+                    #                 # 粉丝
+                    #                 followers_count = each['user']['followers_count']
+                    #                 fan_num = self.extract_num(str(followers_count))
+                    #                 #desc1 = each['desc1'] #不准确
+                    #                 account_url = each['scheme']
+                    #                 # 关注
+                    #                 follow_count = each['user']['follow_count']
+                    #                 focus_num = self.extract_num(str(follow_count))
+                    #                 statuses_count, wb_num, slogan, desc1 = self.get_detial_info(user_id)
+                    #
+                    #                 save_data = {
+                    #                     "mediaType": 1,
+                    #                     "accountName": "{}".format(user_name),
+                    #                     "type": "1",
+                    #                     "accountId": "{}".format(user_id),
+                    #                     "headPicUrl": "{}".format(img),
+                    #                     "wbFocusNum": focus_num,
+                    #                     "wbFanesNum": fan_num,
+                    #                     "wbNum": wb_num,
+                    #                     "url": "{}".format(account_url),
+                    #                     # "category":"{}".format(data["app_type"]),
+                    #                     "createTime": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
+                    #                     "keyWords": keyword,
+                    #                     "certification":"{}".format(desc1),
+                    #                     "containerId": "{}".format(user_id),
+                    #                     "slogan": "{}".format(slogan),
+                    #                     #"sponsorCompany":""
+                    #                 }
+                    #                 print(save_data)
+                    #                 # save_url = run_search_util.get_saveurl()
+                    #                 profile_url = f'https://weibo.com/{user_id}/about'
+                    #                 result = requests.get(profile_url)
+                    #                 print(result.json())
+                except:
+                    print("weibo requests.get error")
+
+def save_data(users):
+    import pymongo
+
+    # uri = "mongodb://root:example@172.17.13.223:27017/?authSource=weibo_db&authMechanism=SCRAM-SHA-256"
+    myclient = pymongo.MongoClient("mongodb://172.17.13.223:27017/",
+                              username='root',
+                              password='example',
+                            authSource='admin',
+                            authMechanism='SCRAM-SHA-1')
+    mydb = myclient["weibo_db"]
+    mycol = mydb["users"]
+    for user in users:
+        # user = card['user']
+        user['_id'] = user['id']
+    # 这里首先采用批量入库，如果发生异常再采用逐条入库
+    import pymongo.errors.DuplicateKeyError as DuplicateKeyError
+    try:
+        x = mycol.insert_many(users)
+    except Exception as e:
+        if e is DuplicateKeyError:
+            for user in users:
+                myquery = {"_id": user['_id']}
+                mydoc = mycol.find(myquery)
+                if mydoc is None:
+                   x = mycol.insert_one(user)
+        else:
+            print(e)
+
+    return x
+
+def main():
+    WEIBO_SEARCH = weibo_search()
+    WEIBO_SEARCH.run()
+
+
+if __name__ == '__main__':
+    main()
+

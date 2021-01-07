@@ -366,8 +366,6 @@ class HiggsClassifier(BaseHandler):
             if image is None:
                 image = data.get("body")
 
-            # im = cv2.imdecode(np.frombuffer(image), cv2.IMREAD_COLOR)
-            # image = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
             input_image = Image.open(io.BytesIO(image)).convert('RGB')
             self.orig_image = input_image
             self.height, self.width = input_image.height, input_image.width
