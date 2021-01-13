@@ -365,8 +365,12 @@ class HiggsClassifier(BaseHandler):
             image = data.get("data")
             if image is None:
                 image = data.get("body")
+            try:
+                input_image = Image.open(io.BytesIO(image)).convert('RGB')
+            except IOError as e:
+                logger.error(e)
+                return None
 
-            input_image = Image.open(io.BytesIO(image)).convert('RGB')
             self.orig_image = input_image
             self.height, self.width = input_image.height, input_image.width
 
@@ -384,7 +388,8 @@ class HiggsClassifier(BaseHandler):
         :param model_input: transformed model input data
         :return: list of inference output in NDArray
         """
-
+        if img is None:
+            return None
         # 添加为了检查输入模型参数
         checkimg = img.unsqueeze(0).to(self.device)
         logger.info(self.timer.start())
@@ -397,6 +402,9 @@ class HiggsClassifier(BaseHandler):
         :return: list of predict results
         """
         print('=============== IN LAST ====================')
+        if inference_output is None:
+            print(f"=========== None =============")
+            return [{'error': '预测结果为空'}]
         scores, boxes = inference_output
         cpu_device = torch.device("cpu")
         boxes = boxes[0]
@@ -424,7 +432,7 @@ class HiggsClassifier(BaseHandler):
             picked_box_probs.append(box_probs)
             picked_labels.extend([class_index] * box_probs.size(0))
         if not picked_box_probs:
-            return torch.tensor([]), torch.tensor([]), torch.tensor([])
+            return [{'error': '预测结果为空'}]
         picked_box_probs = torch.cat(picked_box_probs)
         picked_box_probs[:, 0] *= self.width
         picked_box_probs[:, 1] *= self.height
@@ -447,12 +455,12 @@ def handle(data, context):
         _service.initialize(context)
 
     if data is None:
-        return None
+        return [{'error': '图片数据为空'}]
 
     data = _service.preprocess(data)
     data = _service.inference(data)
     data = _service.postprocess(data)
     import json
 
-    # print(data)
+    print(data)
     return [data]
